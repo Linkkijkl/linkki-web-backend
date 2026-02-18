@@ -119,7 +119,10 @@ fn url_for_location(location: &str, spaces: &Vec<Space>) -> String {
     // navi.jyu.fi links for locations begining with university space codes (case sensitive!)
     for space in spaces {
         if location.starts_with(&space.space_label) {
-            return format!("https://navi.jyu.fi/space/{}", space.id);
+            return format!(
+                "https://navi.jyu.fi/space/{}",
+                urlencoding::encode(&space.id)
+            );
         }
     }
 
@@ -224,19 +227,16 @@ fn data_to_events(
                 .collect()
         })
         // Filter past events out
-        .filter(|event| {
-            //let current_time: DateTime<Local> = Local::now();
-            match event.get_end().map(to_event_date) {
-                Some(Some(end_time)) => match end_time {
-                    EventDate::Date(end_date) => {
-                        current_time.num_days_from_ce() <= end_date.num_days_from_ce()
-                    }
-                    EventDate::DateTimeUtc(end_time) => {
-                        current_time.timestamp() <= end_time.timestamp()
-                    }
-                },
-                _ => false,
-            }
+        .filter(|event| match event.get_end().map(to_event_date) {
+            Some(Some(end_time)) => match end_time {
+                EventDate::Date(end_date) => {
+                    current_time.num_days_from_ce() <= end_date.num_days_from_ce()
+                }
+                EventDate::DateTimeUtc(end_time) => {
+                    current_time.timestamp() <= end_time.timestamp()
+                }
+            },
+            _ => false,
         })
         // Filter out events with start timestamp more than a year in the future
         .filter(|event| {
@@ -405,13 +405,12 @@ mod tests {
         let result = data_to_events(calendar, vec![], now).unwrap();
         assert_matches!(&result[..], [Event {
             summary, description: Some(description),
-            date: _,
             location: Some(Location{string: location_string, url: _}),
-            start_iso8601: _,
-            end_iso8601: _,
+            ..
         }] if summary == "Test Event"
             && description == "Test description"
-            && location_string == "Test Location");
+            && location_string == "Test Location"
+        );
     }
 
     #[test]
@@ -457,6 +456,19 @@ mod tests {
                 && date4 == "04/05/2026"
                 && date5 == "06/07/2026" // Skipped one event because of exclusion rules
                 && last_date == "04/01/2027" // The last returned date is not older than a year
-        )
+        );
+    }
+
+    #[test]
+    fn test_multi_day_parsing() {
+        let calendar_data: &'static str = include_str!("test-data/multi-day.ics");
+        let now = now();
+        let calendar = Calendar::from_str(calendar_data).unwrap();
+        let result = data_to_events(calendar, vec![], now).unwrap();
+        assert_matches!(&result[..], [Event {
+            date,
+            ..
+        }] if date == "03/02/2026 - 07/02/2026"
+        );
     }
 }
