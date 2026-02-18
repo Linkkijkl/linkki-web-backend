@@ -308,7 +308,8 @@ fn data_to_events(
                     if end.signed_duration_since(*start).num_days() == 1 {
                         format!("{}", start.format("%d/%m/%Y"))
                     } else {
-                        format!("{} - {}", start.format("%d/%m/%Y"), end.format("%d/%m/%Y"))
+                        let real_end: NaiveDate = end - Days::new(1);
+                        format!("{} - {}", start.format("%d/%m/%Y"), real_end.format("%d/%m/%Y"))
                     }
                 }
                 (EventDate::DateTimeUtc(start), EventDate::DateTimeUtc(end)) => {
@@ -419,7 +420,7 @@ mod tests {
         let now = now();
         let calendar = Calendar::from_str(calendar_data).unwrap();
         let result = data_to_events(calendar, vec![], now).unwrap();
-        //result.iter().for_each(|event| println!("{}", event.date)); // debug print
+        //result.iter().for_each(|event| println!("{}", event.date)); // Uncomment for debug print
         assert_matches!(
             &result[..],
             [
