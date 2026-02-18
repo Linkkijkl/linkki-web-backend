@@ -119,7 +119,10 @@ fn url_for_location(location: &str, spaces: &Vec<Space>) -> String {
     // navi.jyu.fi links for locations begining with university space codes (case sensitive!)
     for space in spaces {
         if location.starts_with(&space.space_label) {
-            return format!("https://navi.jyu.fi/space/{}", space.id);
+            return format!(
+                "https://navi.jyu.fi/space/{}",
+                urlencoding::encode(&space.id)
+            );
         }
     }
 
@@ -308,7 +311,8 @@ fn data_to_events(
                     if end.signed_duration_since(*start).num_days() == 1 {
                         format!("{}", start.format("%d/%m/%Y"))
                     } else {
-                        format!("{} - {}", start.format("%d/%m/%Y"), end.format("%d/%m/%Y"))
+                        let real_end: NaiveDate = end - Days::new(1);
+                        format!("{} - {}", start.format("%d/%m/%Y"), real_end.format("%d/%m/%Y"))
                     }
                 }
                 (EventDate::DateTimeUtc(start), EventDate::DateTimeUtc(end)) => {
@@ -405,13 +409,12 @@ mod tests {
         let result = data_to_events(calendar, vec![], now).unwrap();
         assert_matches!(&result[..], [Event {
             summary, description: Some(description),
-            date: _,
             location: Some(Location{string: location_string, url: _}),
-            start_iso8601: _,
-            end_iso8601: _,
+            ..
         }] if summary == "Test Event"
             && description == "Test description"
-            && location_string == "Test Location");
+            && location_string == "Test Location"
+        );
     }
 
     #[test]
@@ -420,7 +423,7 @@ mod tests {
         let now = now();
         let calendar = Calendar::from_str(calendar_data).unwrap();
         let result = data_to_events(calendar, vec![], now).unwrap();
-        //result.iter().for_each(|event| println!("{}", event.date)); // debug print
+        //result.iter().for_each(|event| println!("{}", event.date)); // Uncomment for debug print
         assert_matches!(
             &result[..],
             [
@@ -457,6 +460,19 @@ mod tests {
                 && date4 == "04/05/2026"
                 && date5 == "06/07/2026" // Skipped one event because of exclusion rules
                 && last_date == "04/01/2027" // The last returned date is not older than a year
-        )
+        );
+    }
+
+    #[test]
+    fn test_multi_day_parsing() {
+        let calendar_data: &'static str = include_str!("test-data/multi-day.ics");
+        let now = now();
+        let calendar = Calendar::from_str(calendar_data).unwrap();
+        let result = data_to_events(calendar, vec![], now).unwrap();
+        assert_matches!(&result[..], [Event {
+            date,
+            ..
+        }] if date == "03/02/2026 - 07/02/2026"
+        );
     }
 }
